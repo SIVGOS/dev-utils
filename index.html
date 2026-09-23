@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Keep Open</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1f2328;
+    --muted: #656d76;
+    --border: #d0d7de;
+    --card: #f6f8fa;
+    --accent: #0969da;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117;
+      --fg: #e6edf3;
+      --muted: #9198a1;
+      --border: #30363d;
+      --card: #161b22;
+      --accent: #4493f8;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 48px 24px;
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  main { max-width: 640px; margin: 0 auto; }
+  h2 { margin: 0 0 4px; font-size: 22px; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 32px; }
+  h3 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--muted);
+    margin: 0 0 12px;
+  }
+  .tools { display: grid; gap: 12px; }
+  a.tool {
+    display: block;
+    padding: 16px 18px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    text-decoration: none;
+    color: inherit;
+  }
+  a.tool:hover { border-color: var(--accent); }
+  a.tool .t { font-weight: 600; color: var(--accent); }
+  a.tool .d { display: block; font-size: 14px; color: var(--muted); margin-top: 2px; }
+  footer { margin-top: 36px; font-size: 13px; color: var(--muted); }
+  code { background: var(--card); padding: .2em .4em; border-radius: 6px; font-size: 85%; }
+</style>
+</head>
+<body>
+
+<main>
+  <h2>Don't close me!</h2>
+  <p class="sub">Click anywhere on this page once to activate the close warning.</p>
+
+  <h3>Tools</h3>
+  <div class="tools">
+    <a class="tool" href="md-viewer.html" target="_blank" rel="noopener">
+      <span class="t">Markdown Viewer</span>
+      <span class="d">Open any <code>.md</code> file in the browser. Supports <code>?file=path/to/doc.md</code>.</span>
+    </a>
+    <a class="tool" href="dbeaver-md-table.html" target="_blank" rel="noopener">
+      <span class="t">DBeaver Text → Markdown Converter</span>
+      <span class="d">Paste DBeaver query output and get a Markdown table.</span>
+    </a>
+  </div>
+
+  <footer>
+    Served from <code>~/Desktop/mytools</code> — run <code>myserver</code> to start, <code>myserver stop</code> to stop.
+  </footer>
+</main>
+
+<script>
+  // Keep the original guard: warn before this tab is closed.
+  window.onbeforeunload = function() {
+      return "Are you sure you want to leave?";
+  };
+</script>
+</body>
+</html>

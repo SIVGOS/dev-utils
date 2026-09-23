@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DBeaver Text → Markdown Converter</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 0 24px;
+            background: #f7f8fa;
+            color: #1a1d23;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.3px;
+            margin-bottom: 4px;
+        }
+
+        .subtitle {
+            font-size: 0.85rem;
+            color: #6b7280;
+            margin-bottom: 24px;
+        }
+
+        /* ── Legend ── */
+        .legend {
+            background: #fff;
+            border: 1px solid #e2e5ea;
+            border-radius: 8px;
+            padding: 14px 18px;
+            margin-bottom: 22px;
+            font-size: 0.83rem;
+            color: #374151;
+            line-height: 1.7;
+        }
+        .legend strong { color: #111827; }
+        .legend code {
+            background: #f0f1f3;
+            border-radius: 3px;
+            padding: 1px 5px;
+            font-family: 'Cascadia Code', 'Fira Mono', monospace;
+            font-size: 0.82rem;
+            color: #d6336c;
+        }
+        .legend-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px 20px;
+            margin-top: 6px;
+        }
+        .legend-item { display: flex; flex-direction: column; gap: 3px; }
+        .legend-item .tag { font-weight: 600; color: #4f46e5; }
+
+        /* ── Labels ── */
+        label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            color: #6b7280;
+            margin-bottom: 6px;
+        }
+
+        /* ── Textareas ── */
+        textarea {
+            width: 100%;
+            font-family: 'Cascadia Code', 'Fira Mono', 'Courier New', monospace;
+            font-size: 13px;
+            padding: 12px 14px;
+            border: 1.5px solid #d1d5db;
+            border-radius: 8px;
+            background: #fff;
+            color: #1a1d23;
+            resize: vertical;
+            transition: border-color 0.15s;
+            line-height: 1.55;
+        }
+        textarea:focus {
+            outline: none;
+            border-color: #4f46e5;
+            box-shadow: 0 0 0 3px rgba(79,70,229,0.1);
+        }
+        #input  { height: 200px; }
+        #output { height: 180px; background: #fafbfc; }
+
+        /* ── Buttons ── */
+        .btn-row { display: flex; gap: 10px; margin: 14px 0; }
+        button {
+            padding: 9px 22px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s, transform 0.08s;
+        }
+        button:active { transform: scale(0.97); }
+
+        #convertBtn { background: #4f46e5; color: #fff; }
+        #convertBtn:hover { background: #4338ca; }
+
+        #copyBtn {
+            background: #fff;
+            color: #374151;
+            border: 1.5px solid #d1d5db;
+        }
+        #copyBtn:hover { background: #f3f4f6; }
+        #copyBtn.copied {
+            background: #d1fae5;
+            color: #065f46;
+            border-color: #6ee7b7;
+        }
+
+        /* ── Section spacing ── */
+        .section { margin-bottom: 18px; }
+
+        /* ── Preview panel ── */
+        .preview-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+        .preview-header label { margin-bottom: 0; }
+
+        #preview-panel {
+            background: #fff;
+            border: 1.5px solid #d1d5db;
+            border-radius: 8px;
+            padding: 16px 20px;
+            min-height: 80px;
+            overflow-x: auto;
+        }
+
+        #preview-panel.empty {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #9ca3af;
+            font-size: 0.85rem;
+            font-style: italic;
+            min-height: 80px;
+        }
+
+        /* ── Rendered table styles ── */
+        #preview-panel table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 0.88rem;
+        }
+        #preview-panel th {
+            background: #4f46e5;
+            color: #fff;
+            padding: 9px 14px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.82rem;
+            letter-spacing: 0.3px;
+            white-space: nowrap;
+        }
+        #preview-panel th:first-child { border-radius: 6px 0 0 0; }
+        #preview-panel th:last-child  { border-radius: 0 6px 0 0; }
+        #preview-panel td {
+            padding: 8px 14px;
+            border-bottom: 1px solid #e5e7eb;
+            color: #374151;
+            white-space: nowrap;
+        }
+        #preview-panel tr:last-child td { border-bottom: none; }
+        #preview-panel tr:nth-child(even) td { background: #f9fafb; }
+        #preview-panel tr:hover td { background: #eff0ff; }
+
+        /* tab toggle */
+        .output-tabs {
+            display: flex;
+            gap: 0;
+            margin-bottom: 0;
+            border-bottom: 2px solid #e2e5ea;
+        }
+        .tab-btn {
+            padding: 7px 18px;
+            border: none;
+            border-radius: 6px 6px 0 0;
+            background: transparent;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: #6b7280;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: color 0.12s, border-color 0.12s;
+        }
+        .tab-btn:active { transform: none; }
+        .tab-btn.active {
+            color: #4f46e5;
+            border-bottom-color: #4f46e5;
+            background: transparent;
+        }
+        .tab-btn:hover:not(.active) { color: #374151; background: #f3f4f6; }
+
+        .tab-pane { display: none; }
+        .tab-pane.active { display: block; }
+    </style>
+</head>
+<body>
+
+<h1>DBeaver Text → Markdown Converter</h1>
+<p class="subtitle">Paste DBeaver query output and get a clean Markdown table with live preview.</p>
+
+<div class="legend">
+    <strong>Column type indicators</strong> — add these to your column headers to control number formatting:
+    <div class="legend-grid">
+        <div class="legend-item">
+            <span class="tag">Integer &nbsp;<code>(i)</code></span>
+            <span>Whole numbers with thousands commas.<br>e.g. <code>Revenue (i)</code> → <strong>1,234,567</strong></span>
+        </div>
+        <div class="legend-item">
+            <span class="tag">Decimal &nbsp;<code>(d)</code> or <code>(d,n)</code></span>
+            <span>Floats with commas &amp; <em>n</em> decimal places (default 2).<br>e.g. <code>Price (d,3)</code> → <strong>1,234.500</strong></span>
+        </div>
+        <div class="legend-item">
+            <span class="tag">Plain column</span>
+            <span>No indicator — value is output as-is.<br>e.g. <code>Name</code> → <strong>Alice</strong></span>
+        </div>
+    </div>
+    Indicators are stripped from the output table header automatically.
+</div>
+
+<div class="section">
+    <label for="input">Input</label>
+    <textarea id="input" placeholder="Paste DBeaver output here…"></textarea>
+</div>
+
+<div class="btn-row">
+    <button id="convertBtn" onclick="convert()">Convert</button>
+    <button id="copyBtn" onclick="copyOutput()">Copy Markdown</button>
+</div>
+
+<!-- Output tabs -->
+<div class="section">
+    <div class="output-tabs">
+        <button class="tab-btn active" onclick="switchTab('raw', this)">Markdown</button>
+        <button class="tab-btn" onclick="switchTab('preview', this)">Preview</button>
+    </div>
+
+    <div id="tab-raw" class="tab-pane active" style="padding-top:12px;">
+        <textarea id="output" readonly placeholder="Markdown table will appear here…"></textarea>
+    </div>
+
+    <div id="tab-preview" class="tab-pane" style="padding-top:12px;">
+        <div id="preview-panel" class="empty">Convert some DBeaver output to see a preview.</div>
+    </div>
+</div>
+
+<script>
+    // ── Tab switching ────────────────────────────────────────────────────────
+    function switchTab(name, btn) {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-' + name).classList.add('active');
+    }
+
+    // ── Parsing helpers ──────────────────────────────────────────────────────
+    function parseHeader(raw) {
+        let m = raw.match(/^(.*?)\s*\(\s*i\s*\)\s*$/i);
+        if (m) return { cleanName: m[1].trim(), type: 'int', decimals: 0 };
+
+        m = raw.match(/^(.*?)\s*\(\s*d\s*(?:,\s*(\d+))?\s*\)\s*$/i);
+        if (m) {
+            const decimals = m[2] !== undefined ? parseInt(m[2], 10) : 2;
+            return { cleanName: m[1].trim(), type: 'float', decimals };
+        }
+
+        return { cleanName: raw.trim(), type: 'plain', decimals: 0 };
+    }
+
+    function formatCell(value, spec) {
+        if (spec.type === 'plain') return value;
+        const stripped = value.replace(/,/g, '').trim();
+
+        if (spec.type === 'int') {
+            const n = parseFloat(stripped);
+            if (isNaN(n)) return value;
+            return Math.round(n).toLocaleString('en-US');
+        }
+
+        if (spec.type === 'float') {
+            const n = parseFloat(stripped);
+            if (isNaN(n)) return value;
+            return n.toLocaleString('en-US', {
+                minimumFractionDigits: spec.decimals,
+                maximumFractionDigits: spec.decimals,
+            });
+        }
+
+        return value;
+    }
+
+    // ── Main conversion ──────────────────────────────────────────────────────
+    function convert() {
+        const input = document.getElementById('input').value.trim();
+        const outputEl   = document.getElementById('output');
+        const previewEl  = document.getElementById('preview-panel');
+
+        if (!input) {
+            outputEl.value = '';
+            previewEl.innerHTML = '';
+            previewEl.className = 'empty';
+            previewEl.textContent = 'Convert some DBeaver output to see a preview.';
+            return;
+        }
+
+        const lines = input
+            .split(/\r?\n/)
+            .map(line => line.trimEnd())
+            .filter(line => line.length > 0);
+
+        const dataLines = lines.filter(line => !/^[\-\+\s]+$/.test(line));
+
+        if (dataLines.length === 0) {
+            outputEl.value = '';
+            previewEl.className = 'empty';
+            previewEl.textContent = 'Nothing to preview.';
+            return;
+        }
+
+        const rows = dataLines.map(line => {
+            const cells = line.split('|').map(cell => cell.trim());
+            while (cells.length > 0 && cells[0] === '') cells.shift();
+            while (cells.length > 0 && cells[cells.length - 1] === '') cells.pop();
+            return cells;
+        });
+
+        const rawHeaders = rows[0];
+        const specs = rawHeaders.map(parseHeader);
+        const cleanHeaders = specs.map(s => s.cleanName);
+
+        let markdown = '';
+        markdown += '| ' + cleanHeaders.join(' | ') + ' |\n';
+        markdown += '| ' + cleanHeaders.map(() => '---').join(' | ') + ' |\n';
+
+        for (let i = 1; i < rows.length; i++) {
+            const formatted = rows[i].map((cell, ci) =>
+                formatCell(cell, specs[ci] || { type: 'plain' })
+            );
+            markdown += '| ' + formatted.join(' | ') + ' |\n';
+        }
+
+        outputEl.value = markdown;
+
+        // ── Render preview ───────────────────────────────────────────────────
+        previewEl.className = '';
+        previewEl.innerHTML = marked.parse(markdown);
+    }
+
+    // ── Copy helper ──────────────────────────────────────────────────────────
+    function copyOutput() {
+        const output = document.getElementById('output').value;
+        if (!output) return;
+
+        navigator.clipboard.writeText(output).then(() => {
+            const btn = document.getElementById('copyBtn');
+            btn.textContent = 'Copied!';
+            btn.classList.add('copied');
+            setTimeout(() => {
+                btn.textContent = 'Copy Markdown';
+                btn.classList.remove('copied');
+            }, 1800);
+        });
+    }
+</script>
+
+</body>
+</html>
+

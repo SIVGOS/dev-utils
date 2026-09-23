@@ -1,0 +1,4 @@
+# server.py has no Python third-party dependencies — Markdown -> docx export
+# shells out directly to the pandoc CLI (apt install pandoc) and, for Mermaid
+# diagram rendering, to the mermaid-filter npm package (see package.json;
+# run `npm install` in this directory).

@@ -1,0 +1,11 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Node (mermaid-filter and its deps — reinstalled via `npm install`)
+node_modules/
+
+# Runtime state
+*.docx
+mermaid-filter.err

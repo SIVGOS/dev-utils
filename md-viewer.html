@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Markdown Viewer</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  /* Light is the base palette; dark is applied either by system preference
+     (unless the user pinned light) or by an explicit data-theme="dark". */
+  :root {
+    color-scheme: light;
+    --bg: #ffffff;
+    --fg: #1f2328;
+    --muted: #656d76;
+    --border: #d0d7de;
+    --card: #f6f8fa;
+    --code-bg: #f6f8fa;
+    --accent: #0969da;
+    --warn: #9a6700;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #0d1117;
+      --fg: #e6edf3;
+      --muted: #9198a1;
+      --border: #30363d;
+      --card: #161b22;
+      --code-bg: #161b22;
+      --accent: #4493f8;
+      --warn: #d29922;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0d1117;
+    --fg: #e6edf3;
+    --muted: #9198a1;
+    --border: #30363d;
+    --card: #161b22;
+    --code-bg: #161b22;
+    --accent: #4493f8;
+    --warn: #d29922;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  header {
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    z-index: 10;
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  #name { color: var(--muted); font-size: 13px; margin-left: auto; }
+  button {
+    font: inherit;
+    font-size: 14px;
+    padding: 5px 12px;
+    background: var(--card);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  #theme {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px 8px;
+    line-height: 0;
+    color: var(--muted);
+  }
+  #theme:hover { color: var(--fg); }
+  #theme svg { width: 16px; height: 16px; display: block; }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 20px 80px; }
+  #drop.over { outline: 2px dashed var(--accent); outline-offset: -8px; }
+  .empty { color: var(--muted); text-align: center; padding: 60px 0; }
+  .empty code, .note code { background: var(--code-bg); padding: .2em .4em; border-radius: 6px; font-size: 85%; }
+  .note {
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--warn);
+    border-radius: 6px;
+    padding: 12px 16px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .note strong { color: var(--fg); }
+
+  /* export-to-docx modal */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+  }
+  .overlay[hidden] { display: none; }
+  .modal {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    width: min(360px, calc(100vw - 40px));
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .25);
+  }
+  .modal h2 { margin: 0 0 8px; font-size: 16px; }
+  .modal p { margin: 0 0 16px; font-size: 14px; color: var(--muted); }
+  .modal p strong { color: var(--fg); word-break: break-all; }
+  .modal-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .modal-actions button { flex: 1 1 auto; }
+  button.secondary { background: none; }
+  .modal-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .spinner {
+    width: 14px;
+    height: 14px;
+    flex: none;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  .spinner.done { display: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* server file browser */
+  #browser {
+    position: fixed;
+    left: 0;
+    right: 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--card);
+    padding: 14px 20px;
+    display: none;
+    z-index: 15;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .25);
+    max-height: calc(100vh - 60px);
+    overflow-y: auto;
+  }
+  #browser.open { display: block; }
+  .browser-inner { max-width: 860px; margin: 0 auto; }
+  .browser-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .browser-bar input {
+    flex: 1;
+    font: inherit;
+    font-size: 13px;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    padding: 5px 10px;
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    min-width: 0;
+  }
+  #entries {
+    max-height: 46vh;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+  }
+  .entry {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    text-align: left;
+    padding: 7px 12px;
+    background: none;
+    border: 0;
+    border-radius: 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .entry:last-child { border-bottom: 0; }
+  .entry:hover { background: var(--card); border-color: var(--border); }
+  .entry .icon { width: 1.2em; flex: none; color: var(--muted); }
+  .entry .meta { margin-left: auto; color: var(--muted); font-size: 12px; flex: none; }
+  .entry.dir .label { font-weight: 600; }
+  .browser-hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
+
+  /* rendered markdown */
+  #out h1, #out h2 { border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+  #out h1, #out h2, #out h3, #out h4 { margin: 1.5em 0 .6em; line-height: 1.25; }
+  #out h1:first-child { margin-top: 0; }
+  #out a { color: var(--accent); }
+  #out img { max-width: 100%; }
+  #out code {
+    background: var(--code-bg);
+    padding: .2em .4em;
+    border-radius: 6px;
+    font-size: 85%;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  }
+  #out pre {
+    background: var(--code-bg);
+    padding: 16px;
+    border-radius: 6px;
+    overflow-x: auto;
+  }
+  #out pre code { background: none; padding: 0; font-size: 100%; }
+  #out pre.mermaid {
+    background: none;
+    padding: 8px 0;
+    text-align: center;
+    overflow-x: auto;
+  }
+  #out pre.mermaid svg { max-width: 100%; }
+  #out blockquote {
+    margin: 0 0 16px;
+    padding: 0 1em;
+    color: var(--muted);
+    border-left: .25em solid var(--border);
+  }
+  #out table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; }
+  #out th, #out td { border: 1px solid var(--border); padding: 6px 13px; }
+  #out tr:nth-child(2n) { background: var(--code-bg); }
+  #out hr { border: 0; border-top: 1px solid var(--border); margin: 24px 0; }
+</style>
+</head>
+<body id="drop">
+
+<header>
+  <h1>Markdown Viewer</h1>
+  <button id="browse" hidden>Browse server files</button>
+  <button id="export" hidden>Export to Word</button>
+  <span id="name"></span>
+  <button id="theme" title="Switch theme" aria-label="Switch theme"></button>
+</header>
+
+<div id="exportOverlay" class="overlay" hidden>
+  <div class="modal">
+    <h2>Export to Word</h2>
+    <p>Convert <strong id="exportName"></strong> to a <code>.docx</code> file.</p>
+    <div class="modal-actions">
+      <button id="exportDownload">Download</button>
+      <button id="exportSave">Save next to file</button>
+      <button id="exportCancel" class="secondary">Cancel</button>
+    </div>
+    <div id="exportStatus" class="modal-status" hidden>
+      <span class="spinner"></span>
+      <span id="exportStatusText">Generating…</span>
+    </div>
+  </div>
+</div>
+
+<div id="browser">
+  <div class="browser-inner">
+    <div class="browser-bar">
+      <button id="up" title="Parent directory">↑</button>
+      <input id="path" spellcheck="false" placeholder="/path/to/dir or /path/to/file.md">
+      <button id="go">Go</button>
+      <button id="reload" title="Re-read this directory">⟳</button>
+    </div>
+    <div id="entries"></div>
+    <div class="browser-hint" id="hint"></div>
+  </div>
+</div>
+
+<main>
+  <div id="out"></div>
+</main>
+
+<script>
+const out = document.getElementById('out');
+const nameEl = document.getElementById('name');
+const drop = document.getElementById('drop');
+const browser = document.getElementById('browser');
+const entriesEl = document.getElementById('entries');
+const pathInput = document.getElementById('path');
+const hintEl = document.getElementById('hint');
+const browseBtn = document.getElementById('browse');
+const themeBtn = document.getElementById('theme');
+const exportBtn = document.getElementById('export');
+const exportOverlay = document.getElementById('exportOverlay');
+const exportNameEl = document.getElementById('exportName');
+const exportDownloadBtn = document.getElementById('exportDownload');
+const exportSaveBtn = document.getElementById('exportSave');
+const exportCancelBtn = document.getElementById('exportCancel');
+const exportStatusEl = document.getElementById('exportStatus');
+const exportStatusText = document.getElementById('exportStatusText');
+const exportSpinnerEl = exportStatusEl.querySelector('.spinner');
+
+marked.setOptions({ gfm: true, breaks: false });
+
+// Render ```mermaid fences as diagrams instead of plain code text.
+// Returning false falls back to marked's default <pre><code> for every other language.
+marked.use({
+  renderer: {
+    code({ text, lang }) {
+      if ((lang || '').trim().toLowerCase() !== 'mermaid') return false;
+      return '<pre class="mermaid">' + escapeHtml(text) + '</pre>\n';
+    }
+  }
+});
+
+/* ---------- Theme ---------- */
+
+const THEME_KEY = 'mdv:theme';
+const SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+  'stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2' +
+  'M2.5 12h2.2M19.3 12h2.2M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M19.1 4.9l-1.6 1.6M6.5 17.5l-1.6 1.6"/></svg>';
+const MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+  'stroke-linejoin="round"><path d="M20.5 14.3A8.5 8.5 0 1 1 9.7 3.5a6.8 6.8 0 0 0 10.8 10.8z"/></svg>';
+
+const systemDark = window.matchMedia('(prefers-color-scheme: dark)');
+
+function storedTheme() {
+  try { return localStorage.getItem(THEME_KEY); } catch { return null; }   // private mode
+}
+
+// Stamp the resolved theme on <html> so the toggle wins over the media query,
+// and show the icon for the mode the button would switch *to*.
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  themeBtn.innerHTML = theme === 'dark' ? SUN : MOON;
+  themeBtn.title = theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+}
+
+function currentTheme() {
+  return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+}
+
+applyTheme(storedTheme() || (systemDark.matches ? 'dark' : 'light'));
+
+themeBtn.addEventListener('click', () => {
+  const next = currentTheme() === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  try { localStorage.setItem(THEME_KEY, next); } catch { /* private mode */ }
+  refreshMermaidTheme();
+});
+
+// Keep following the OS until the user picks a side themselves.
+systemDark.addEventListener('change', e => {
+  if (!storedTheme()) applyTheme(e.matches ? 'dark' : 'light');
+  refreshMermaidTheme();
+});
+
+/* ---------- Mermaid diagrams ---------- */
+
+const mermaidReady = typeof mermaid !== 'undefined';
+
+function initMermaid() {
+  if (!mermaidReady) return;
+  mermaid.initialize({ startOnLoad: false, theme: currentTheme() === 'dark' ? 'dark' : 'default' });
+}
+
+// Render every ```mermaid block in the current document. Keeps the original
+// source on the element so a later theme switch can redraw it from scratch.
+function renderMermaid() {
+  if (!mermaidReady) return;
+  const nodes = out.querySelectorAll('pre.mermaid');
+  if (!nodes.length) return;
+  nodes.forEach(el => { el.dataset.source = el.textContent; });
+  mermaid.run({ nodes }).catch(e => console.error('mermaid render failed', e));
+}
+
+// mermaid.run() replaces a block's contents with rendered SVG in place, so
+// redrawing for a new theme means restoring the saved source text first.
+function refreshMermaidTheme() {
+  if (!mermaidReady) return;
+  initMermaid();
+  const nodes = out.querySelectorAll('pre.mermaid[data-source]');
+  nodes.forEach(el => {
+    el.removeAttribute('data-processed');
+    el.textContent = el.dataset.source;
+  });
+  if (nodes.length) mermaid.run({ nodes }).catch(e => console.error('mermaid render failed', e));
+}
+
+initMermaid();
+
+// Does this document already show a rendered file? Drives "reuse this tab" vs "open a new one".
+let hasDoc = false;
+let serverInfo = null;           // /api/info payload, or null when the backend isn't there
+let currentDir = null;           // directory shown in the browser panel
+let currentFilePath = null;      // absolute on-disk path of the doc shown, if opened via the backend
+let exporting = false;           // a docx export request is in flight
+// Content this tab has opened for children that can't fetch their path: token -> {path, text}
+const pending = new Map();
+let tokenSeq = 0;
+
+const LAST_DIR_KEY = 'mdv:lastDir';
+
+/* ---------- Backend ---------- */
+
+// GET /api/<name>. Throws Error(message) on any non-OK response.
+async function api(name, params) {
+  const url = new URL('/api/' + name, location.origin);
+  for (const [k, v] of Object.entries(params || {})) url.searchParams.set(k, v);
+  const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+  let data = null;
+  try { data = await res.json(); } catch { /* non-JSON body */ }
+  if (!res.ok) throw new Error((data && data.error) || (res.status + ' ' + res.statusText));
+  return data;
+}
+
+// The tools also work as bare files over file://, so the backend is optional.
+async function detectBackend() {
+  if (location.protocol === 'file:') return null;
+  try {
+    return await api('info');
+  } catch {
+    return null;
+  }
+}
+
+/* ---------- Rendering ---------- */
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function showEmpty() {
+  out.innerHTML = '<p class="empty">' + (serverInfo
+    ? 'Pick a file from <strong>Browse server files</strong> — anything under <code>' +
+      escapeHtml(serverInfo.root) + '</code>.<br>Direct link: <code>?file=/path/to/doc.md</code>' +
+      '<br>You can also drag a file onto this page.'
+    : 'Backend not detected — start it with <code>myserver</code>, then open ' +
+      '<code>http://localhost:8888/md-viewer.html</code> to browse files.' +
+      '<br>You can still drag a file onto this page.') + '</p>';
+  hasDoc = false;
+  currentFilePath = null;
+  updateExportVisibility();
+  nameEl.textContent = '';
+  document.title = 'Markdown Viewer';
+  // The browser panel is the only way in now, so lead with it.
+  if (serverInfo) openPanel();
+}
+
+// Reflect the open file in the URL so a refresh reopens it.
+function setUrl(path) {
+  const url = location.pathname + '?file=' + encodeURIComponent(path);
+  if (location.pathname + location.search !== url) history.pushState({ file: path }, '', url);
+}
+
+function show(text, label) {
+  out.innerHTML = marked.parse(text);
+  // Open links in a new tab
+  out.querySelectorAll('a[href]').forEach(a => { a.target = '_blank'; a.rel = 'noopener'; });
+  renderMermaid();
+  nameEl.textContent = label;
+  document.title = String(label).split('/').pop() + ' — Markdown Viewer';
+  hasDoc = true;
+  updateExportVisibility();
+  window.scrollTo(0, 0);
+}
+
+function updateExportVisibility() {
+  exportBtn.hidden = !(serverInfo && currentFilePath);
+}
+
+function showError(html) {
+  out.innerHTML = '<div class="note">' + html + '</div>';
+  hasDoc = false;
+}
+
+/* ---------- Opening by path ---------- */
+
+// Read a path through the backend, falling back to a plain static fetch.
+// `push` writes the path into the URL; skip it when the URL already says so.
+async function loadPath(path, push = true) {
+  let apiErr = null;
+  if (serverInfo) {
+    try {
+      const data = await api('read', { path });
+      currentFilePath = data.path;
+      show(data.text, data.path);
+      rememberDir(data.dir);
+      if (push) setUrl(data.path);   // the resolved absolute path survives a refresh
+      return true;
+    } catch (e) {
+      apiErr = e;
+    }
+  }
+  // No backend, or it refused: the path may still be a static file next to this page.
+  try {
+    const res = await fetch(new URL(path, location.href));
+    if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+    currentFilePath = null;   // served statically, not through the backend — export needs a real path
+    show(await res.text(), path);
+    if (push) setUrl(path);
+    return true;
+  } catch (staticErr) {
+    const detail = apiErr ? apiErr.message : staticErr.message;
+    showError(
+      'Could not load <strong>' + escapeHtml(path) + '</strong> — ' + escapeHtml(detail) + '.' +
+      (serverInfo
+        ? '<br>The read API only serves files under <code>' + escapeHtml(serverInfo.root) + '</code>. ' +
+          'Restart with <code>MYSERVER_ROOT=/other/dir myserver restart</code> to widen that.'
+        : location.protocol === 'file:'
+          ? '<br>You opened this page as a local file, so there is no backend and <code>fetch</code> is blocked. ' +
+            'Run <code>myserver</code> and use <code>http://localhost:8888/md-viewer.html</code> instead.'
+          : '<br>The backend did not respond — is <code>myserver</code> running?') +
+      '<br>You can still pick the file with the button above.'
+    );
+    return false;
+  }
+}
+
+// Open a path: new browser tab if this one is already showing something.
+function openPath(path) {
+  closePanel();
+  if (!hasDoc) return loadPath(path);
+  const url = location.pathname + '?file=' + encodeURIComponent(path);
+  if (!window.open(url, '_blank')) {
+    showError('Your browser blocked the new tab. Allow pop-ups for this page, or open ' +
+              '<code>' + escapeHtml(url) + '</code> yourself.');
+  }
+}
+
+/* ---------- Server file browser ---------- */
+
+function rememberDir(dir) {
+  if (!dir) return;
+  currentDir = dir;
+  try { localStorage.setItem(LAST_DIR_KEY, dir); } catch { /* private mode */ }
+}
+
+function fmtSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+}
+
+async function listDir(dir) {
+  entriesEl.innerHTML = '<div class="entry"><span class="label">Loading…</span></div>';
+  let data;
+  try {
+    data = await api('list', { dir });
+  } catch (e) {
+    entriesEl.innerHTML = '<div class="entry"><span class="label">' + escapeHtml(e.message) + '</span></div>';
+    hintEl.textContent = '';
+    return;
+  }
+  rememberDir(data.dir);
+  pathInput.value = data.dir;
+  document.getElementById('up').disabled = !data.parent;
+  document.getElementById('up').dataset.parent = data.parent || '';
+
+  if (!data.entries.length) {
+    entriesEl.innerHTML = '<div class="entry"><span class="label">Nothing readable here.</span></div>';
+  } else {
+    entriesEl.innerHTML = '';
+    for (const item of data.entries) {
+      const btn = document.createElement('button');
+      btn.className = 'entry' + (item.type === 'dir' ? ' dir' : '');
+      btn.innerHTML =
+        '<span class="icon">' + (item.type === 'dir' ? '📁' : '📄') + '</span>' +
+        '<span class="label">' + escapeHtml(item.name) + '</span>' +
+        '<span class="meta">' + (item.type === 'dir' ? '' : fmtSize(item.size) + ' · ') +
+        escapeHtml(item.mtime.slice(0, 10)) + '</span>';
+      btn.addEventListener('click', () => {
+        if (item.type === 'dir') listDir(item.path);
+        else openPath(item.path);
+      });
+      entriesEl.appendChild(btn);
+    }
+  }
+  const dirs = data.entries.filter(e => e.type === 'dir').length;
+  hintEl.textContent = `${dirs} folder(s), ${data.entries.length - dirs} file(s) · root ${data.root}`;
+}
+
+function panelOpen() {
+  return browser.classList.contains('open');
+}
+
+// Anchor the floating panel to the header's actual (possibly wrapped) height,
+// so it opens right where the user is instead of at the top of the page.
+function positionPanel() {
+  browser.style.top = document.querySelector('header').getBoundingClientRect().bottom + 'px';
+}
+
+function openPanel() {
+  positionPanel();
+  browser.classList.add('open');
+  if (!entriesEl.childElementCount) {
+    let start = currentDir;
+    if (!start) { try { start = localStorage.getItem(LAST_DIR_KEY); } catch { /* private mode */ } }
+    listDir(start || serverInfo.root);
+  }
+}
+
+function closePanel() {
+  browser.classList.remove('open');
+}
+
+browseBtn.addEventListener('click', () => {
+  if (panelOpen()) closePanel();
+  else openPanel();
+});
+
+window.addEventListener('resize', () => { if (panelOpen()) positionPanel(); });
+
+// Click away to dismiss. This listens on pointerdown rather than click because
+// clicking a folder re-renders the list, detaching the target before a click
+// handler would run — which would read as a click outside the panel.
+document.addEventListener('pointerdown', e => {
+  if (!panelOpen()) return;
+  if (browser.contains(e.target) || browseBtn.contains(e.target)) return;
+  closePanel();
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (!exportOverlay.hidden) return closeExportModal();
+  if (!panelOpen()) return;
+  closePanel();
+  browseBtn.focus();
+});
+
+/* ---------- Export to Word ---------- */
+
+let pendingDocxBlob = null;
+let pendingDocxFilename = '';
+
+function openExportModal() {
+  if (!currentFilePath || exporting) return;
+  pendingDocxBlob = null;
+  exportNameEl.textContent = currentFilePath.split('/').pop();
+  exportStatusEl.hidden = true;
+  exportCancelBtn.textContent = 'Cancel';
+  exportSaveBtn.hidden = false;
+  exportDownloadBtn.textContent = 'Download';
+  exportDownloadBtn.disabled = exportSaveBtn.disabled = exportCancelBtn.disabled = false;
+  exportOverlay.hidden = false;
+}
+
+function closeExportModal() {
+  if (exporting) return;
+  exportOverlay.hidden = true;
+}
+
+function setExportStatus(text, spinning) {
+  exportStatusEl.hidden = false;
+  exportStatusText.textContent = text;
+  exportSpinnerEl.classList.toggle('done', !spinning);
+}
+
+function saveBlobAs(blob, filename) {
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = objectUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
+
+async function runExport(mode) {
+  if (exporting) return;
+  exporting = true;
+  exportDownloadBtn.disabled = exportSaveBtn.disabled = exportCancelBtn.disabled = true;
+  setExportStatus('Generating .docx…', true);
+
+  const url = new URL('/api/export-docx', location.origin);
+  url.searchParams.set('path', currentFilePath);
+
+  try {
+    if (mode === 'save') {
+      const res = await fetch(url, { method: 'POST' });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error((data && data.error) || (res.status + ' ' + res.statusText));
+      exporting = false;
+      setExportStatus('Saved as ' + data.savedPath, false);
+      exportCancelBtn.disabled = false;
+      exportCancelBtn.textContent = 'Close';
+      return;
+    }
+
+    const res = await fetch(url);
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      throw new Error((data && data.error) || (res.status + ' ' + res.statusText));
+    }
+    pendingDocxBlob = await res.blob();
+    pendingDocxFilename = currentFilePath.split('/').pop().replace(/\.[^./]+$/, '') + '.docx';
+    exporting = false;
+    setExportStatus('Ready.', false);
+    exportSaveBtn.hidden = true;
+    exportDownloadBtn.textContent = 'Download .docx';
+    exportDownloadBtn.disabled = false;
+    exportCancelBtn.disabled = false;
+    exportCancelBtn.textContent = 'Close';
+  } catch (e) {
+    exporting = false;
+    setExportStatus('Export failed — ' + e.message, false);
+    exportDownloadBtn.disabled = exportSaveBtn.disabled = exportCancelBtn.disabled = false;
+  }
+}
+
+exportBtn.addEventListener('click', openExportModal);
+exportCancelBtn.addEventListener('click', closeExportModal);
+exportDownloadBtn.addEventListener('click', () => {
+  if (pendingDocxBlob) {
+    saveBlobAs(pendingDocxBlob, pendingDocxFilename);
+    closeExportModal();
+  } else {
+    runExport('download');
+  }
+});
+exportSaveBtn.addEventListener('click', () => runExport('save'));
+exportOverlay.addEventListener('pointerdown', e => { if (e.target === exportOverlay) closeExportModal(); });
+
+document.getElementById('up').addEventListener('click', e => {
+  const parent = e.currentTarget.dataset.parent;
+  if (parent) listDir(parent);
+});
+
+document.getElementById('reload').addEventListener('click', () => listDir(currentDir || serverInfo.root));
+
+// The path box takes a directory (browse into it) or a file (open it).
+function submitPath() {
+  const value = pathInput.value.trim();
+  if (!value) return;
+  api('list', { dir: value })
+    .then(() => listDir(value))
+    .catch(() => openPath(value));
+}
+document.getElementById('go').addEventListener('click', submitPath);
+pathInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitPath(); });
+
+/* ---------- Drag and drop ---------- */
+
+// A dropped File has no usable path, so its text is handed to the new tab directly.
+function openInNewTab(name, text) {
+  const token = 'mdv-' + (++tokenSeq) + '-' + performance.now().toFixed(0);
+  const child = window.open(location.pathname + '?file=' + encodeURIComponent(name), token);
+  if (!child) return false;
+  pending.set(token, { path: name, text });
+  return true;
+}
+
+// A child tab that couldn't read its path asks us for the content by token.
+window.addEventListener('message', e => {
+  const msg = e.data;
+  if (!msg || msg.type !== 'mdv-request' || typeof msg.token !== 'string') return;
+  const entry = pending.get(msg.token);
+  if (!entry || !e.source) return;
+  pending.delete(msg.token);
+  e.source.postMessage({ type: 'mdv-content', token: msg.token, path: entry.path, text: entry.text }, '*');
+});
+
+function readFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error('read failed'));
+    reader.readAsText(file);
+  });
+}
+
+// First file lands in this tab if it's empty; everything else gets its own tab.
+async function handleFiles(files) {
+  for (const file of files) {
+    let text;
+    try {
+      text = await readFile(file);
+    } catch {
+      showError('Could not read <strong>' + escapeHtml(file.name) + '</strong>.');
+      continue;
+    }
+    if (hasDoc && openInNewTab(file.name, text)) continue;
+    if (hasDoc) {
+      showError('Your browser blocked the new tab, so <strong>' + escapeHtml(file.name) +
+                '</strong> is not shown. Allow pop-ups for this page and drop it again.');
+      continue;
+    }
+    // No URL update here: a dropped file has no path, so there is nothing a refresh
+    // could reload. Open it from the browser panel to get a linkable URL.
+    currentFilePath = null;
+    show(text, file.name);
+  }
+}
+
+['dragenter', 'dragover'].forEach(t => drop.addEventListener(t, e => {
+  e.preventDefault();
+  drop.classList.add('over');
+}));
+['dragleave', 'drop'].forEach(t => drop.addEventListener(t, e => {
+  e.preventDefault();
+  drop.classList.remove('over');
+}));
+drop.addEventListener('drop', e => handleFiles([...e.dataTransfer.files]));
+
+/* ---------- Startup: ?file=<path> ---------- */
+
+// Ask the opener for content by token, resolving to null if it doesn't answer in time.
+function requestFromOpener(token) {
+  return new Promise(resolve => {
+    const timer = setTimeout(() => { window.removeEventListener('message', onMsg); resolve(null); }, 2000);
+    function onMsg(e) {
+      const msg = e.data;
+      if (!msg || msg.type !== 'mdv-content' || msg.token !== token) return;
+      clearTimeout(timer);
+      window.removeEventListener('message', onMsg);
+      resolve(msg);
+    }
+    window.addEventListener('message', onMsg);
+    window.opener.postMessage({ type: 'mdv-request', token }, '*');
+  });
+}
+
+// Back/forward between the empty state and files opened in this tab.
+window.addEventListener('popstate', () => {
+  const path = new URLSearchParams(location.search).get('file');
+  if (path) loadPath(path, false);
+  else showEmpty();
+});
+
+(async function init() {
+  serverInfo = await detectBackend();
+  browseBtn.hidden = !serverInfo;
+
+  const urlPath = new URLSearchParams(location.search).get('file');
+  if (!urlPath) { showEmpty(); return; }
+
+  out.innerHTML = '<p class="empty">Loading ' + escapeHtml(urlPath) + '…</p>';
+
+  // Content handed over by the tab that opened us wins: that path came from a file
+  // picker and may not exist on disk as written.
+  if (window.opener && window.name.startsWith('mdv-')) {
+    const msg = await requestFromOpener(window.name);
+    if (msg) { currentFilePath = null; show(msg.text, msg.path); return; }
+  }
+  loadPath(urlPath, false);   // the URL already names this file
+})();
+</script>
+
+</body>
+</html>

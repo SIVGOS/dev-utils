@@ -1,0 +1,8 @@
+{
+  "name": "mytools",
+  "private": true,
+  "description": "mermaid-filter is used by server.py to render Mermaid diagrams to images during Markdown -> docx export",
+  "dependencies": {
+    "mermaid-filter": "^1.4.7"
+  }
+}
