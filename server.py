@@ -194,6 +194,13 @@ def find_chrome() -> str | None:
         path = shutil.which(name)
         if path:
             return path
+    # macOS installs these as app bundles, not bare binaries on PATH.
+    for mac_path in (
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    ):
+        if Path(mac_path).exists():
+            return mac_path
     return None
 
 

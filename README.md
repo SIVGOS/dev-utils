@@ -16,9 +16,30 @@ Python API server. Everything runs on `localhost` only.
 ## Prerequisites
 
 - Python 3.10+
-- the `pandoc` CLI binary — `sudo apt install pandoc` (or `brew install pandoc` on macOS)
+- the `pandoc` CLI binary
 - Node.js + npm — only needed for rendering Mermaid diagrams in the Word export
 - a system Chrome or Chromium browser — used headless by the Mermaid renderer
+  (skip this and the Node step and everything still works — Mermaid fences in
+  the Word export just fall back to plain code blocks instead of images)
+
+### Linux
+
+```bash
+sudo apt install pandoc          # or your distro's package manager
+sudo apt install nodejs npm      # or see https://nodejs.org for other install methods
+google-chrome --version          # already installed on this machine; if not: sudo apt install google-chrome-stable / chromium
+```
+
+### macOS (Apple Silicon, e.g. M4)
+
+Install [Homebrew](https://brew.sh) first if you don't have it, then:
+
+```bash
+brew install pandoc node
+brew install --cask google-chrome    # if you don't already have Chrome
+```
+
+Everything below is identical on both platforms.
 
 ## Setup
 
@@ -32,22 +53,21 @@ python3 -m venv .venv
 
 # Node deps — mermaid-filter, used by the Word export to render Mermaid
 # diagrams. Skips downloading its own ~300MB Chromium; server.py points it
-# at your system Chrome/Chromium at runtime instead.
+# at your system Chrome/Chromium at runtime instead (auto-detected — on
+# macOS it looks in /Applications for the app bundle).
 PUPPETEER_SKIP_DOWNLOAD=true PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true npm install
 ```
 
-If you skip the Node step, everything still works — Mermaid fences in the
-Word export just fall back to plain code blocks instead of images.
-
 ### Shell integration (the `myserver` command)
 
-Add this to `~/.bashrc` (or `~/.zshrc`):
+Add this to `~/.bashrc` on Linux, or `~/.zshrc` on macOS (zsh is the default
+shell there since Catalina):
 
 ```bash
 myserver() { "$HOME/Desktop/mytools/serve.sh" "$@"; }
 ```
 
-Reload your shell (`source ~/.bashrc`), then:
+Reload your shell (`source ~/.bashrc` or `source ~/.zshrc`), then:
 
 ```bash
 myserver            # start (if needed) and open the index page
@@ -62,7 +82,8 @@ myserver log         # tail the request log
   `MYSERVER_ROOT=/some/dir myserver`
 
 If `~/Desktop/mytools` isn't where you cloned this repo, adjust the path in
-the `myserver` function above accordingly.
+the `myserver` function above accordingly. `serve.sh` opens the page with
+`xdg-open` on Linux and `open` on macOS automatically.
 
 ## How it fits together
 

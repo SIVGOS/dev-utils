@@ -30,12 +30,21 @@ running() {
 }
 
 # Is anything at all listening on the port? (e.g. a server started by hand)
+# `ss` is Linux-only; macOS has neither ss nor iproute2, so fall back to lsof.
 port_busy() {
-  ss -ltnH "sport = :${PORT}" 2>/dev/null | grep -q .
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltnH "sport = :${PORT}" 2>/dev/null | grep -q .
+  elif command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"${PORT}" -sTCP:LISTEN >/dev/null 2>&1
+  else
+    (exec 3<>"/dev/tcp/127.0.0.1/${PORT}") 2>/dev/null
+  fi
 }
 
 open_browser() {
-  if [[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]] && command -v xdg-open >/dev/null; then
+  if [[ "$(uname -s)" == "Darwin" ]] && command -v open >/dev/null; then
+    open "$URL" >/dev/null 2>&1 &
+  elif [[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]] && command -v xdg-open >/dev/null; then
     xdg-open "$URL" >/dev/null 2>&1 &
   else
     echo "No display detected — open $URL yourself."
