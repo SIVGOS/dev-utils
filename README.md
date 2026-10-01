@@ -88,6 +88,15 @@ files anywhere on disk, and overwrites an existing `.docx` of the same name.
 (If your shell function is named `mytools` instead of `myserver`, use
 `mytools md2docx ...`.)
 
+It does **not** need the server to be running — it calls pandoc directly. What
+it does need:
+
+- `pandoc` and the `.venv` (see Setup) for the basic conversion.
+- Node (from `npm install`) and Chrome/Chromium to render Mermaid diagrams.
+  Mermaid blocks are rendered by launching `mermaid-filter` (a Node script)
+  and headless Chrome as short-lived subprocesses, not a server. If the npm
+  install is missing, diagrams fall back to plain code blocks.
+
 - Override the port: `MYSERVER_PORT=9000 myserver`
 - Override which directory the file-read API may reach (default `$HOME`):
   `MYSERVER_ROOT=/some/dir myserver`
