@@ -77,6 +77,17 @@ myserver status
 myserver log         # tail the request log
 ```
 
+### Convert Markdown to Word from the command line
+
+```bash
+myserver md2docx path/to/doc.md    # writes path/to/doc.docx and prints its path
+```
+
+Uses the same pandoc + Mermaid pipeline as the viewer's Word export, works on
+files anywhere on disk, and overwrites an existing `.docx` of the same name.
+(If your shell function is named `mytools` instead of `myserver`, use
+`mytools md2docx ...`.)
+
 - Override the port: `MYSERVER_PORT=9000 myserver`
 - Override which directory the file-read API may reach (default `$HOME`):
   `MYSERVER_ROOT=/some/dir myserver`
@@ -102,6 +113,7 @@ a network.
 
 ```
 server.py               local API server (file list/read, docx export)
+md2docx.py              CLI Markdown → .docx converter (`myserver md2docx`)
 serve.sh                start/stop/restart/status wrapper — the `myserver` command
 md-viewer.html           Markdown viewer + Word export UI
 dbeaver-md-table.html    DBeaver output → Markdown table converter

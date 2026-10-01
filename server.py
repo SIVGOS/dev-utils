@@ -204,22 +204,13 @@ def find_chrome() -> str | None:
     return None
 
 
-def convert_to_docx(query: dict) -> tuple[bytes, Path]:
-    """Convert the markdown file named by query['path'] to .docx bytes.
-
-    Returns (docx_bytes, resolved_source_path) so callers can derive either a
-    download filename or an on-disk save path from the same resolved file.
+def markdown_to_docx(target: Path) -> bytes:
+    """Convert the markdown file at `target` to .docx bytes. No root check — callers do that.
 
     Shells out to the pandoc CLI (not the `pandoc` pip package) so that
     --filter mermaid-filter can run between pandoc's read and write passes,
     turning ```mermaid fences into embedded images instead of plain code.
     """
-    raw = (query.get("path") or [""])[0]
-    target = resolve_within_root(raw)
-    if target.suffix.lower() not in MARKDOWN_SUFFIXES:
-        raise ApiError(HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
-                       f"'{target.suffix or target.name}' is not markdown")
-
     pandoc_bin = shutil.which("pandoc")
     if pandoc_bin is None:
         raise ApiError(HTTPStatus.SERVICE_UNAVAILABLE,
@@ -257,9 +248,21 @@ def convert_to_docx(query: dict) -> tuple[bytes, Path]:
         if result.returncode != 0 or not out_file.exists():
             raise ApiError(HTTPStatus.INTERNAL_SERVER_ERROR,
                             f"pandoc conversion failed: {result.stderr.strip() or result.returncode}")
-        data = out_file.read_bytes()
+        return out_file.read_bytes()
 
-    return data, target
+
+def convert_to_docx(query: dict) -> tuple[bytes, Path]:
+    """Convert the markdown file named by query['path'] to .docx bytes.
+
+    Returns (docx_bytes, resolved_source_path) so callers can derive either a
+    download filename or an on-disk save path from the same resolved file.
+    """
+    raw = (query.get("path") or [""])[0]
+    target = resolve_within_root(raw)
+    if target.suffix.lower() not in MARKDOWN_SUFFIXES:
+        raise ApiError(HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
+                       f"'{target.suffix or target.name}' is not markdown")
+    return markdown_to_docx(target), target
 
 
 ROUTES = {"/api/info": lambda q: api_info(), "/api/list": api_list, "/api/read": api_read}

@@ -6,6 +6,7 @@
 #   myserver status    show whether it is running
 #   myserver restart   stop, then start again
 #   myserver log       tail the request log
+#   myserver md2docx <file.md>   convert markdown to .docx in the same directory
 #
 # Override the port with MYSERVER_PORT=9000 myserver
 # Override which files the read API may reach with MYSERVER_ROOT=/some/dir (default: $HOME)
@@ -116,9 +117,10 @@ case "${1:-start}" in
     fi
     ;;
   open)      open_browser ;;
+  md2docx)   shift; exec "$PYTHON" "$ROOT/md2docx.py" "$@" ;;
   log)       tail -n 40 -f "$LOG_FILE" ;;
   *)
-    echo "usage: myserver [start|stop|restart|status|open|log]" >&2
+    echo "usage: myserver [start|stop|restart|status|open|log|md2docx <file.md>]" >&2
     exit 2
     ;;
 esac
