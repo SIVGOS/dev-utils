@@ -39,6 +39,7 @@ WEB_DIR = Path(__file__).resolve().parent
 # Files may be read from anywhere under this root. Override with MYSERVER_ROOT.
 FILE_ROOT = Path(os.environ.get("MYSERVER_ROOT", Path.home())).expanduser().resolve()
 MERMAID_FILTER_BIN = WEB_DIR / "node_modules" / ".bin" / "mermaid-filter"
+TABLE_WIDTHS_FILTER = WEB_DIR / "table-widths.lua"
 PANDOC_TIMEOUT_SECONDS = 120
 
 # Text-ish files the API is willing to hand over. Extend as needed.
@@ -230,6 +231,8 @@ def markdown_to_docx(target: Path) -> bytes:
 
     env = os.environ.copy()
     args = [pandoc_bin, "-f", "markdown", "-t", "docx", "--resource-path", str(target.parent)]
+    if TABLE_WIDTHS_FILTER.exists():
+        args += ["--lua-filter", str(TABLE_WIDTHS_FILTER)]
     if MERMAID_FILTER_BIN.exists():
         chrome = find_chrome()
         if chrome:
