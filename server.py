@@ -7,6 +7,7 @@ few endpoints to work with instead:
     GET  /api/info                     -> {root, webDir, home}
     GET  /api/list?dir=<path>          -> directories + markdown files in <path>
     GET  /api/read?path=<path>         -> {path, name, size, mtime, text}
+    GET  /api/raw?path=<path>          -> an image file's bytes (for <img> tags in rendered markdown)
     GET  /api/export-docx?path=<path>  -> the file converted to .docx, as a download
     POST /api/export-docx?path=<path>  -> converts and saves <path>.docx next to it
 
@@ -46,6 +47,10 @@ READABLE_SUFFIXES = {
     ".txt", ".text", ".rst",
     ".json", ".csv", ".tsv", ".yml", ".yaml", ".toml", ".ini", ".cfg",
     ".log", ".sql", ".html", ".css", ".js", ".py", ".sh",
+}
+IMAGE_TYPES = {
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif",
+    ".webp": "image/webp", ".svg": "image/svg+xml", ".bmp": "image/bmp", ".ico": "image/x-icon",
 }
 MARKDOWN_SUFFIXES = {".md", ".markdown", ".mdown", ".mkd", ".mdx"}
 MAX_READ_BYTES = 20 * 1024 * 1024  # refuse to slurp anything larger
@@ -275,6 +280,8 @@ class Handler(SimpleHTTPRequestHandler):
         path = urlparse(self.path).path
         if path == "/api/export-docx":
             self.handle_export(save=False)
+        elif path == "/api/raw":
+            self.handle_raw()
         elif path.startswith("/api/"):
             self.handle_api(path)
         else:
@@ -330,6 +337,34 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("Content-Disposition", content_disposition(source.stem + ".docx"))
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def handle_raw(self):
+        if not self.request_ok():
+            return
+        query = parse_qs(urlparse(self.path).query)
+        try:
+            target = resolve_within_root((query.get("path") or [""])[0])
+            mime = IMAGE_TYPES.get(target.suffix.lower())
+            if mime is None:
+                raise ApiError(HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
+                               f"'{target.suffix or target.name}' is not a servable image type")
+            if target.stat().st_size > MAX_READ_BYTES:
+                raise ApiError(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "image too large")
+            data = target.read_bytes()
+        except ApiError as e:
+            return self.send_json(e.status, {"error": e.message})
+        except OSError as e:
+            return self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(e)})
+
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", mime)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-cache")
+        # An SVG opened directly (not via <img>) must not run scripts on our origin.
+        self.send_header("Content-Security-Policy", "sandbox")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         self.wfile.write(data)
 

@@ -461,12 +461,29 @@ function show(text, label) {
   out.innerHTML = marked.parse(text);
   // Open links in a new tab
   out.querySelectorAll('a[href]').forEach(a => { a.target = '_blank'; a.rel = 'noopener'; });
+  resolveImages();
   renderMermaid();
   nameEl.textContent = label;
   document.title = String(label).split('/').pop() + ' — Markdown Viewer';
   hasDoc = true;
   updateExportVisibility();
   window.scrollTo(0, 0);
+}
+
+// Local images (absolute or relative to the open file) can't be fetched straight
+// from the page origin, so route them through the backend's /api/raw endpoint.
+function resolveImages() {
+  if (!serverInfo) return;
+  out.querySelectorAll('img[src]').forEach(img => {
+    const src = img.getAttribute('src');
+    if (/^([a-z][a-z0-9+.-]*:|\/\/|#)/i.test(src)) return;   // http:, data:, blob:, protocol-relative
+    let path = decodeURI(src.split(/[?#]/)[0]);
+    if (!path.startsWith('/') && !path.startsWith('~')) {
+      if (!currentFilePath) return;                          // nothing to resolve a relative path against
+      path = currentFilePath.replace(/[^/]*$/, '') + path;
+    }
+    img.src = '/api/raw?path=' + encodeURIComponent(path);
+  });
 }
 
 function updateExportVisibility() {
